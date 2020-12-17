@@ -3,16 +3,11 @@ from initialize_workspace import *
 import pandas as pd
 import random
 import math
+import numpy as np
+import matplotlib.pyplot as plt
+import itertools
 
-dataset = 'mic'
-track_extension = '_hex_cln'
-mode_is ='full'
 workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
-if mode_is == 'full':
-    input_folder = workspace.input_folder_full 
-elif mode_is == '50ms':
-    input_folder = workspace.input_folder_50ms
-
 
 def get_probs(prob, classes):
     g = 0
@@ -224,3 +219,43 @@ def determine_combinations(midi_f_cand): # returns all posible ways to play a ca
         if midi_f_cand in list(x):
             ret.append((midi_f_cand, string, compute_fret(string, midi_f_cand)))
     return ret
+
+    #=== plotting and statistics
+
+def plot_confusion_matrix(cm, x_classes,y_classes,
+                            normalize=False,
+                            title='Confusion matrix',
+                            cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    plt.clf()
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        np.nan_to_num(cm,False)
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    
+    tick_marks_y = np.arange(len(y_classes))
+    tick_marks_x = np.arange(len(x_classes))
+    plt.xticks(tick_marks_x,x_classes , rotation=45)
+    plt.yticks(tick_marks_y, y_classes)
+
+    fmt = '.2f' if normalize else '.2f'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                    horizontalalignment="center",
+                    color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+    #plt.show()
+    plt.savefig(workspace.result_folder +'/' + title.replace(" ", "") +'.png')
+    return plt
