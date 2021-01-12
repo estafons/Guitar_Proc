@@ -18,17 +18,17 @@ Running the scripts:
 to correspond to* ~/PathTo/MyWorkspace*. 
 *track_class.py* sums up, all methods to predict a tablature given the onsets, pitch, and recording. To do that:  
 
-`jam_name = workspace.annotations_folder+'/jam_name.jams`
-`x = TrackInstance(jam_name, dataset)`
-`x.predict_tablature('FromAnnos')   # can be exchanged FromCNN to predict onsets and pitch using the madmom and crepe libraries`  
+`jam_name = workspace.annotations_folder+'/jam_name.jams`  
+`x = TrackInstance(jam_name, dataset)`  
+`x.predict_tablature('FromAnnos')   # can be exchanged FromCNN to predict onsets and pitch using the madmom and crepe libraries`    
 
 dataset of choice is also hardcoded as* 'mic'* to change that, change (currently line 19) 'dataset = 'mic' ' to* 'audio_mono_pickup'* or* 'hex_cln'*
 
 ### helper.py
 Contains key components of the script.Crucial Among them,  is the note_instance class with the methods, **compute_partials** and **compute_beta**. Example use:  
 
-`x = note_instance(name = self.track_name, data = instance_data, midi_note = midi_note.prediction)`
-`x.compute_partials(no_of_partials,diviate=x.fundamental_measured/2)`
+`x = note_instance(name = self.track_name, data = instance_data, midi_note = midi_note.prediction)`  
+`x.compute_partials(no_of_partials,diviate=x.fundamental_measured/2)`  
 `beta = compute_beta(y=np.array(x.differences),track=x)`  
 
 (keyword arguement *diviate* is the length of the window used to detect partials, as proposed by Barbancho et al, we set it to half of the fundamental)
