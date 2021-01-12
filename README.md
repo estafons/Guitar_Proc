@@ -12,7 +12,7 @@ Choose a workspace folder* ~/PathTo/MyWorkspace*. Create directories:
 - *~/PathTo/MyWorkspace/hex_cln* -> 6 chanel-debleeded 
 - *~/PathTo/MyWorkspace/audio_mono_pickup* -> summed chanels 
 
-Running the scripts:
+## Scripts:
 ### track_class.py:
 **Change line!!!** (currently 20)->  workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
 to correspond to* ~/PathTo/MyWorkspace*. 
