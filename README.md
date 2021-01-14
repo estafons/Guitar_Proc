@@ -11,6 +11,13 @@ Choose a workspace folder* ~/PathTo/MyWorkspace*. Create directories:
 - *~/PathTo/MyWorkspace/mic* ->mic recordings 
 - *~/PathTo/MyWorkspace/hex_cln* -> 6 chanel-debleeded 
 - *~/PathTo/MyWorkspace/audio_mono_pickup* -> summed chanels 
+- *~/PathTo/MyWorkspace/models* -> will extract trained models here
+
+## Attention For Windows. the windows_code branch contains code that can be run properly on windows.
+Main changes are paths updates, disabling multiproccessing module due to runtime error.
+
+## Training Models
+After creating the models folder, run the rrn_train.py script. This will train the models according to the hard codded open string beta measured, that correpsond to the Guitarset dataset.
 
 ## Scripts:
 ### track_class.py:
