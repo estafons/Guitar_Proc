@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import itertools
 
-workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
+workspace = initialize_workspace('C:Users/stefa/Documents/guit_workspace')
 
 def get_probs(prob, classes):
     g = 0

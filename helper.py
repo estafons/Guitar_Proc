@@ -309,7 +309,3 @@ def perfect_beta(midi,track):
     final_beta =compute_beta(y=None,d=d,k=k,track=x,mode='full')
     del x
     return final_beta
-
-if __name__ == "__main__":
-    for midi in range(73,74):
-        split_dataset_train(midi)

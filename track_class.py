@@ -3,9 +3,9 @@ from initialize_workspace import *
 import jams
 import librosa
 import numpy as np
-from madmom.audio.filters import hz2midi
-from madmom.evaluation.onsets import onset_evaluation
-from madmom.features.onsets import CNNOnsetProcessor, OnsetPeakPickingProcessor
+#from madmom.audio.filters import hz2midi
+#from madmom.evaluation.onsets import onset_evaluation
+#from madmom.features.onsets import CNNOnsetProcessor, OnsetPeakPickingProcessor
 import crepe
 import warnings
 import pickle
@@ -17,7 +17,7 @@ from matplotlib import lines as mlines, pyplot as plt
 import random
 
 dataset = 'mic'
-workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
+workspace = initialize_workspace('C:Users/stefa/Documents/guit_workspace')
 
 coeff = read_correlate_matrix()
 coeff = (1,1,1,1,1)
@@ -368,6 +368,7 @@ def compute_confusion_matrixes():
                             normalize = True, title = title)        
                                              
 jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
+print(1)
 x = TrackInstance(jam_name, dataset)
 x.predict_tablature('FromAnnos')
 x.rnn_tablature_FromAnnos.tablaturize()
