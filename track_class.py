@@ -17,9 +17,9 @@ from matplotlib import lines as mlines, pyplot as plt
 import random
 
 dataset = 'mic'
-workspace = initialize_workspace('C:Users/stefa/Documents/guit_workspace')
+workspace = initialize_workspace(os.path.join('C:\\','Users','stefa','Documents','guit_workspace'))
 
-coeff = read_correlate_matrix()
+#coeff = read_correlate_matrix()
 coeff = (1,1,1,1,1)
 print(coeff)
 c_est = sum(coeff)/len(coeff)
@@ -36,14 +36,14 @@ def convert_name(name, dataset = None, mode = 'to_wav'):
         else:
             raise NameError('Not proper track extension neither wav or jams')
     elif mode == 'to_wav':
-        folder_len = name.rfind('/')
+        folder_len = name.rfind('\\')
         temp_name = name[folder_len+1:-5]
-        name = (workspace.workspace_folder+'/' +
-                            dataset + '/' + temp_name + 
+        name = os.path.join(workspace.workspace_folder,
+                            dataset, temp_name + 
                                 '_' + dataset + '.wav')
 
     elif mode == 'to_jams':
-        folder_len = name.rfind('/')
+        folder_len = name.rfind('\\')
         temp_name = name[folder_len+1:len(dataset)-4]
         name = workspace.annotations_folder + temp_name + '.jams'
     else:
@@ -179,7 +179,7 @@ class TrackInstance():
 
         #load models
         for midi in range(40,82):
-            filename = workspace.model_folder + '/'+ str(midi) + '_rrn_model.sav'
+            filename = os.path.join(workspace.model_folder, str(midi) + '_rrn_model.sav')
             try:
                 neigh_dict[midi] = pickle.load(open(filename, 'rb'))
             except FileNotFoundError:
@@ -288,7 +288,7 @@ class Tablature():
         for index, t in enumerate(zip(self.onsets,self.midi_notes,self.strings)):
             onset, midi, string = t
             fret = compute_fret(string.prediction,midi.prediction)
-            temp_str += 'onset is {} midi is {} and string-fret {} {} \n'.format(
+            temp_str += 'onset is {} midi is {} and string-fret {} {} /n'.format(
                                                                     onset.prediction,
                                                                      midi.prediction, 
                                                                      string.prediction, fret)
@@ -343,7 +343,7 @@ def compute_confusion_matrixes():
     correct_rnn = 0
     confusion_matrix_ga = np.zeros((6,6)) 
     confusion_matrix_rnn = np.zeros((6,7)) 
-    jam_list = glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams')
+    jam_list = glob.glob(os.path.join(workspace.annotations_folder, 'single_notes','*solo*.jams'))
     #jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 3)
     for jam_name in jam_list:
     #jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
@@ -367,8 +367,7 @@ def compute_confusion_matrixes():
     plot_confusion_matrix(confusion_matrix_rnn, x_classes, y_classes,
                             normalize = True, title = title)        
                                              
-jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
-print(1)
+jam_name = os.path.join(workspace.annotations_folder,'05_BN1-147-Gb_solo.jams')
 x = TrackInstance(jam_name, dataset)
 x.predict_tablature('FromAnnos')
 x.rnn_tablature_FromAnnos.tablaturize()

@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import itertools
 
-workspace = initialize_workspace('C:Users/stefa/Documents/guit_workspace')
+workspace = initialize_workspace(os.path.join('C:\\','Users\stefa\Documents\guit_workspace'))
 
 def get_probs(prob, classes):
     g = 0
@@ -30,7 +30,7 @@ def compute_fret(string,midi):
 
 def read_correlate_matrix():
     r = []
-    dfd = my_read_csv('/'+'fullcorelation_matrix_all_tracks_1000_perms.csv')
+    dfd = my_read_csv('fullcorelation_matrix_all_tracks_1000_perms.csv')
     if dfd is not None:
         res = dfd.to_numpy()    
         #    print(res)
@@ -39,8 +39,8 @@ def read_correlate_matrix():
     return r
 
 def my_read_csv(name):
-    if os.path.isfile(workspace.result_folder+'/call'+name):
-        df = pd.read_csv(workspace.result_folder+'/call'+name)
+    if os.path.isfile(os.path.join(workspace.result_folder, 'call', name)):
+        df = pd.read_csv(os.path.join(workspace.result_folder, 'call', name))
         return df
     else:
         return None
@@ -257,5 +257,5 @@ def plot_confusion_matrix(cm, x_classes,y_classes,
     plt.xlabel('Predicted label')
     plt.tight_layout()
     #plt.show()
-    plt.savefig(workspace.result_folder +'/' + title.replace(" ", "") +'.png')
+    plt.savefig(os.path.join(workspace.result_folder, title.replace(" ", "") +'.png'))
     return plt

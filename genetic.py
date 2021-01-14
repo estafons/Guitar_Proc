@@ -32,8 +32,9 @@ def genetic(estim_tab, probability_list, coeff):
     toolbox.register("mate", tools.cxTwoPoint)
     toolbox.register("mutate", mutate_func)
     toolbox.register("select", tools.selTournament, k =3000, tournsize = 5)#, #tournsize=3)
-    pool = multiprocessing.Pool()
-    toolbox.register("map", pool.map)#
+   # pool = multiprocessing.Pool()
+   # toolbox.register("map", pool.map)#
+    toolbox.register("map", map) # windows workarround. Cant use multiprocessing at the moment
     #create initial population
     pop = toolbox.population()
     #pop.append(toolbox.cor_individual())

@@ -8,7 +8,7 @@ from initialize_workspace import *
 dataset = 'mic'
 track_extension = '_hex_cln'
 mode_is ='full'
-workspace = initialize_workspace('C:Users/stefa/Documents/guit_workspace')
+workspace = initialize_workspace(os.path.join('C:\\','Users\stefa\Documents\guit_workspace'))
 
 def get_radius(midi):
     beta_list = []
@@ -50,7 +50,7 @@ def train_models(dict_of_dicts):
             X = np.array(X)
             y = np.array(y)
             neigh.fit(X.reshape(-1, 1), y)
-            filename = workspace.model_folder + '/'+ str(midi_key) + '_rrn_model.sav'
+            filename = os.path.join(workspace.model_folder, str(midi_key) + '_rrn_model.sav')
             pickle.dump(neigh, open(filename, 'wb'))
         else:
             pass

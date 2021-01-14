@@ -1,22 +1,22 @@
 # function that initializes our workspace
 import os
 import argparse
-import glob
+from glob import glob
 class workspace_class:
     def __init__(self,workspace_folder):
         self.workspace_folder = workspace_folder
-        self.input_folder_full = self.workspace_folder+'/full_dataset'
-        self.input_folder_50ms = self.workspace_folder+'/fixed_50ms_dataset'
+        self.input_folder_full = os.path.join(self.workspace_folder,'full_dataset')
+        self.input_folder_50ms = os.path.join(self.workspace_folder, 'fixed_50ms_dataset')
         self.result_folder = self.create_result_folder()
-        self.annotations_folder = self.workspace_folder +'/annos'
-        self.mic_folder = self.workspace_folder + '/mic'
-        self.mix_folder = self.workspace_folder + '/audio_mono_pickup'
-        self.audio_hex_folder = self.workspace_folder +'/hex_cln'
-        self.model_folder = self.workspace_folder + '/models'
+        self.annotations_folder = os.path.join(self.workspace_folder, 'annos')
+        self.mic_folder = os.path.join(self.workspace_folder, 'mic')
+        self.mix_folder = os.path.join(self.workspace_folder, 'audio_mono_pickup')
+        self.audio_hex_folder = os.path.join(self.workspace_folder, 'hex_cln')
+        self.model_folder = os.path.join(self.workspace_folder, 'models')
 
 
     def create_result_folder(self):
-        path = self.workspace_folder+'/results'
+        path = os.path.join(self.workspace_folder, 'results')
         self.result_folder = path
         if os.path.isdir(path):
             pass
@@ -28,7 +28,7 @@ class workspace_class:
             else:
                 print ("Successfully created the directory %s " % path)
             for midi in range(40,74):
-                path = self.workspace_folder+'/results/c'+str(midi)
+                path = os.path.join(self.workspace_folder, 'results','c'+str(midi))
                 if os.path.isdir(path):
                     pass
                 else:
