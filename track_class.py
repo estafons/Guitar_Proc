@@ -15,11 +15,13 @@ from misc import read_correlate_matrix, compute_fret, get_probs, plot_confusion_
 from matplotlib import lines as mlines, pyplot as plt
 #temp lbiraries not really needed
 import random
+import shutil
 
 dataset = 'mic'
-workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
+# workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
+workspace = initialize_workspace('./dataset')
 
-coeff = read_correlate_matrix()
+# coeff = read_correlate_matrix()
 coeff = (1,1,1,1,1)
 print(coeff)
 c_est = sum(coeff)/len(coeff)
@@ -64,10 +66,10 @@ class TrackInstance():
     def __init__(self, jam_name, dataset): #, dataset
         self.jam_name = jam_name
         self.track_name = convert_name(jam_name, dataset, 'to_wav')
-        self.true_tablature = self.read_tablature_from_jams()
+        self.true_tablature = self.read_tablature_from_jams() # NOTE:
         print(self.track_name)
         audio, sr = librosa.load(self.track_name, sr=44100, mono=False)
-        self.audio = audio
+        self.audio = audio  # NOTE:
         self.sr = sr
         self.predicted_tablature = None
         self.rnn_tablature = None
@@ -169,6 +171,24 @@ class TrackInstance():
         return onsets, midi_notes
 
 
+    def return_onset_times(self): # __greg__
+        tablature =  self.true_tablature
+        trackOnsets = []
+        # print('tablature:', tablature)
+        for instance in zip(tablature.onsets, tablature.midi_notes, tablature.strings):    
+            # print('AAAAAAAA')    
+            onset, midi_note, string = instance
+            # print(onset.prediction)
+            trackOnsets.append(onset.prediction)
+            # offset = onset.prediction + 0.06 # TODO: check again
+            # start = int(round(onset.prediction*(self.sr)))
+            # end = int(round(offset*(self.sr)))
+            # instance_data = self.audio[start:end] #NOTE: use mono chanel
+            # print(onset.prediction)
+
+        return np.array(trackOnsets)
+
+
     def rnn_predict_strings(self):
     #initializations
         wrong_dict = {0:0,1:0,2:0,3:0,4:0,5:0}
@@ -196,7 +216,7 @@ class TrackInstance():
                 if 'hex_cln' in self.track_name:
                     temp = self.audio[string.prediction,:]
                     instance_data = temp[start:end]
-                else:
+                else: # NOTE: mono chanel
                     instance_data = self.audio[start:end]
 
                 #compute beta coeef
@@ -279,7 +299,7 @@ class Tablature():
 
     def __init__(self, onsets = [], midi_notes = [], strings = []):
         self.tab_len = len(onsets)
-        self.onsets = [Onset(x) for x in onsets]
+        self.onsets = [Onset(x) for x in onsets] # NOTE:
         self.midi_notes = [MidiNote(x) for x in midi_notes]
         self.strings = [String(x) for x in strings]
     
@@ -336,6 +356,50 @@ def compute_confusion(confusion_matrix, predicted_tablature, true_tablature, ons
                  raise Exception('The midi values are different something is wrong')
     return confusion_matrix
 
+
+def get_features_and_targets(): # __greg__
+    # jam_list = glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams')
+    HOP = 441 # 10 ms
+    W_SIZE = 2048
+    FS = 44100 # not used
+    n_bands= 40
+
+    path_to_store = './data/'
+
+    try: shutil.rmtree(path_to_store)
+    except: print('No need to clean old data...')
+
+    try: os.mkdir(path_to_store)
+    except: print('ERROR: Failed to create new data dir.'); exit(1)
+    # except: shutil.rmtree(path_to_store)
+
+
+    jam_list = glob.glob(workspace.annotations_folder + '/*.jams')
+    # print(workspace.annotations_folder)
+    # print(jam_list)
+    for jam_name in jam_list:
+        x = TrackInstance(jam_name, dataset)    
+        # extract features
+        feats = librosa.feature.melspectrogram(x.audio, sr=x.sr, n_mels=n_bands, n_fft=W_SIZE, hop_length=HOP)
+        # get track onsets
+        onset_times = x.return_onset_times()
+        # print(onset_times) 
+        onset_frames = librosa.core.time_to_frames(onset_times, sr=x.sr, n_fft=W_SIZE, hop_length=HOP)
+        baf = np.array( [np.zeros( feats.shape[1] )]) # length
+
+        # print(baf.shape)
+        baf[0, onset_frames] = 1.
+        baf = np.swapaxes(baf, 0, 1)
+
+        filename = jam_name.split('.')[0]
+
+        np.savez(path_to_store+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
+        npzfile = np.load(path_to_store+filename+'.npz')
+
+    return 0
+
+
+
 def compute_confusion_matrixes():
     y_classes = ['E','A','D','G','B','e']
     x_classes = ['E','A','D','G','B','e', 'Inconclusive']
@@ -366,9 +430,12 @@ def compute_confusion_matrixes():
     title = 'Rnn Confusion Matrix For ' + dataset + ' Recordings accuracy is ' + str(accuracy_rnn)+'No Stop'
     plot_confusion_matrix(confusion_matrix_rnn, x_classes, y_classes,
                             normalize = True, title = title)        
-                                             
-jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
-x = TrackInstance(jam_name, dataset)
-x.predict_tablature('FromAnnos')
-x.rnn_tablature_FromAnnos.tablaturize()
-x.predicted_tablature_FromAnnos.tablaturize()
+
+
+if __name__ == '__main__':
+    get_features_and_targets()
+    # jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
+    # x = TrackInstance(jam_name, dataset)
+    # x.predict_tablature('FromAnnos')
+    # x.rnn_tablature_FromAnnos.tablaturize()
+    # x.predicted_tablature_FromAnnos.tablaturize()

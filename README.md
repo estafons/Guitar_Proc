@@ -11,6 +11,8 @@ Choose a workspace folder* ~/PathTo/MyWorkspace*. Create directories:
 - *~/PathTo/MyWorkspace/mic* ->mic recordings 
 - *~/PathTo/MyWorkspace/hex_cln* -> 6 chanel-debleeded 
 - *~/PathTo/MyWorkspace/audio_mono_pickup* -> summed chanels 
+++ models
+++ results
 
 ## Scripts:
 ### track_class.py:

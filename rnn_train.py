@@ -8,7 +8,10 @@ from initialize_workspace import *
 dataset = 'mic'
 track_extension = '_hex_cln'
 mode_is ='full'
-workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
+# workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
+workspace = initialize_workspace('./dataset/')
+
+
 
 def get_radius(midi):
     beta_list = []
