@@ -2,11 +2,13 @@
 from initialize_workspace import *
 import jams
 import librosa
+import soundfile as sf
 import numpy as np
-#from madmom.audio.filters import hz2midi
+from madmom.audio.filters import hz2midi, midi2hz
 #from madmom.evaluation.onsets import onset_evaluation
 #from madmom.features.onsets import CNNOnsetProcessor, OnsetPeakPickingProcessor
 import crepe
+import glob
 import warnings
 import pickle
 from helper import note_instance, compute_beta
@@ -169,21 +171,32 @@ class TrackInstance():
         return onsets, midi_notes
 
 
-    def rnn_predict_strings(self):
+    def rnn_predict_strings(self, mode = 'gnb'):
     #initializations
+        cnt_g, cnt_b = 0, 0
+        
         wrong_dict = {0:0,1:0,2:0,3:0,4:0,5:0}
         no_of_partials = 14
         probability_list = []
         estim_tab = []
         neigh_dict ={}
 
-        #load models
-        for midi in range(40,82):
-            filename = os.path.join(workspace.model_folder, str(midi) + '_rrn_model.sav')
-            try:
-                neigh_dict[midi] = pickle.load(open(filename, 'rb'))
-            except FileNotFoundError:
-                return 0
+        #load models rnn
+        if mode == 'rnn':
+            for midi in range(40,82):
+                filename = os.path.join(workspace.model_folder, str(midi) + '_rrn_model.sav')
+                try:
+                    neigh_dict[midi] = pickle.load(open(filename, 'rb'))
+                except FileNotFoundError:
+                    return 0
+        #load models bayes
+        else:
+            for midi in range(40,82):
+                filename = os.path.join(workspace.model_folder, str(midi) + '_gnb_model.sav')
+                try:
+                    neigh_dict[midi] = pickle.load(open(filename, 'rb'))
+                except FileNotFoundError:
+                    return 0
 
         #create and load track. 
         for instance in zip(self.temp_tablature.onsets,
@@ -216,10 +229,17 @@ class TrackInstance():
 
                         probability_list.append(get_probs(prob, 
                                                 neigh_dict[midi_note.prediction].classes_))
+
+                        cnt_g += 1
+                        sf.write(os.path.join(workspace.workspace_folder,'good',str(cnt_g) + 'good'+str(midi_note.prediction) +'.wav'), instance_data, self.sr, 'PCM_24')
+                        print('good is ', x.fundamental_measured,' ', midi2hz(midi_note.prediction))
                 else:
                     estim_tab.append([midi_note.prediction,7, 
                                         7,onset.prediction, offset])
                     probability_list.append([7])
+                    print('bad is ', x.fundamental_measured,' ', midi2hz(midi_note.prediction))
+                    cnt_b += 1
+                    sf.write(os.path.join(workspace.workspace_folder,'bad', str(cnt_b) + 'bad'+str(midi_note.prediction) +'.wav'), instance_data, self.sr, 'PCM_24')
 
         return estim_tab, probability_list
     
@@ -344,7 +364,7 @@ def compute_confusion_matrixes():
     confusion_matrix_ga = np.zeros((6,6)) 
     confusion_matrix_rnn = np.zeros((6,7)) 
     jam_list = glob.glob(os.path.join(workspace.annotations_folder, 'single_notes','*solo*.jams'))
-    #jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 3)
+ #   jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 3)
     for jam_name in jam_list:
     #jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
         x = TrackInstance(jam_name, dataset)
@@ -366,9 +386,13 @@ def compute_confusion_matrixes():
     title = 'Rnn Confusion Matrix For ' + dataset + ' Recordings accuracy is ' + str(accuracy_rnn)+'No Stop'
     plot_confusion_matrix(confusion_matrix_rnn, x_classes, y_classes,
                             normalize = True, title = title)        
-                                             
-jam_name = os.path.join(workspace.annotations_folder,'05_BN1-147-Gb_solo.jams')
-x = TrackInstance(jam_name, dataset)
-x.predict_tablature('FromAnnos')
-x.rnn_tablature_FromAnnos.tablaturize()
-x.predicted_tablature_FromAnnos.tablaturize()
+
+def test():                                           
+    jam_name = os.path.join(workspace.annotations_folder,'05_BN1-147-Gb_solo.jams')
+    x = TrackInstance(jam_name, dataset)
+    x.predict_tablature('FromAnnos')
+    x.rnn_tablature_FromAnnos.tablaturize()
+    x.predicted_tablature_FromAnnos.tablaturize()
+
+if __name__ == "__main__":
+    compute_confusion_matrixes()
