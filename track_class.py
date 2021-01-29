@@ -364,7 +364,8 @@ def get_features_and_targets(): # __greg__
     FS = 44100 # not used
     n_bands= 40
 
-    path_to_store = './data/'
+    # path_to_store = './PrepdData/melspec/Audio/'
+    path_to_store = './Audio/'
 
     try: shutil.rmtree(path_to_store)
     except: print('No need to clean old data...')
@@ -378,6 +379,8 @@ def get_features_and_targets(): # __greg__
     # print(workspace.annotations_folder)
     # print(jam_list)
     for jam_name in jam_list:
+        if not 'solo' in jam_name: 
+            continue
         x = TrackInstance(jam_name, dataset)    
         # extract features
         feats = librosa.feature.melspectrogram(x.audio, sr=x.sr, n_mels=n_bands, n_fft=W_SIZE, hop_length=HOP)
@@ -391,7 +394,7 @@ def get_features_and_targets(): # __greg__
         baf[0, onset_frames] = 1.
         baf = np.swapaxes(baf, 0, 1)
 
-        filename = jam_name.split('.')[0]
+        filename = jam_name.split('/')[-1][:-5]
 
         np.savez(path_to_store+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
         npzfile = np.load(path_to_store+filename+'.npz')
