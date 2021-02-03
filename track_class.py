@@ -474,7 +474,7 @@ def compute_confusion_matrixes():
 
 if __name__ == '__main__':
     # get_features_and_targets() # __greg__
-
+ 
     jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
     x = TrackInstance(jam_name, dataset)
     x.predict_tablature('custom')
