@@ -4,6 +4,7 @@ import jams
 import librosa
 import soundfile as sf
 import numpy as np
+from midiutil import MIDIFile
 from madmom.audio.filters import hz2midi, midi2hz
 #from madmom.evaluation.onsets import onset_evaluation
 #from madmom.features.onsets import CNNOnsetProcessor, OnsetPeakPickingProcessor
@@ -63,17 +64,27 @@ def convert_name(name, dataset = None, mode = 'to_wav'):
 
 
 class TrackInstance():
-    def __init__(self, jam_name, dataset): #, dataset
-        self.jam_name = jam_name
-        self.track_name = convert_name(jam_name, dataset, 'to_wav')
-        self.true_tablature = self.read_tablature_from_jams()
-        print(self.track_name)
-        audio, sr = librosa.load(self.track_name, sr=44100, mono=False)
-        self.audio = audio
-        self.sr = sr
-        self.predicted_tablature = None
-        self.rnn_tablature = None
-        self.predicted_strings = None
+    def __init__(self, jam_name, dataset, AnnosMode = True): #, dataset
+        if AnnosMode:
+            self.jam_name = jam_name
+            self.track_name = convert_name(jam_name, dataset, 'to_wav')
+            self.true_tablature = self.read_tablature_from_jams()
+            print(self.track_name)
+            audio, sr = librosa.load(self.track_name, sr=44100, mono=False)
+            self.audio = audio
+            self.sr = sr
+            self.predicted_tablature = None
+            self.rnn_tablature = None
+            self.predicted_strings = None
+        else:
+            self.track_name = jam_name
+            print(self.track_name)
+            audio, sr = librosa.load(self.track_name, sr=44100, mono=False)
+            self.audio = audio
+            self.sr = sr
+            self.predicted_tablature = None
+            self.rnn_tablature = None
+            self.predicted_strings = None
 
 
 
@@ -83,7 +94,7 @@ class TrackInstance():
         strings = []
         if mode == 'FromCNN':
             onsets, midi_notes = self.predict_notes_onsets()
-            self.temp_tablature = Tablature(onsets, midi_notes, [])
+            self.temp_tablature = Tablature(onsets, midi_notes, [(1,1) for x in onsets])
             estim_tab, probs = self.rnn_predict_strings()
             temp = [(x[1],1) for x in estim_tab]
             self.rnn_tablature_FromCNN = Tablature(onsets, midi_notes, temp)
@@ -166,7 +177,8 @@ class TrackInstance():
         return midi_notes
 
     def predict_notes_onsets(self):
-        onsets = self.predict_onsets()
+       # onsets = self.predict_onsets() here for madmom
+        onsets = [(x.prediction, 1) for x in self.true_tablature.onsets] # test only pitch detection
         midi_notes = self.predict_notes_at_time(onsets)
         return onsets, midi_notes
 
@@ -232,12 +244,10 @@ class TrackInstance():
 
                         cnt_g += 1
                         sf.write(os.path.join(workspace.workspace_folder,'good',str(cnt_g) + 'good'+str(midi_note.prediction) +'.wav'), instance_data, self.sr, 'PCM_24')
-                        print('good is ', x.fundamental_measured,' ', midi2hz(midi_note.prediction))
                 else:
                     estim_tab.append([midi_note.prediction,7, 
                                         7,onset.prediction, offset])
                     probability_list.append([7])
-                    print('bad is ', x.fundamental_measured,' ', midi2hz(midi_note.prediction))
                     cnt_b += 1
                     sf.write(os.path.join(workspace.workspace_folder,'bad', str(cnt_b) + 'bad'+str(midi_note.prediction) +'.wav'), instance_data, self.sr, 'PCM_24')
 
@@ -339,6 +349,25 @@ class Tablature():
                 handles=handle_list, ncol=8)
         plt.show()
 
+    def output_to_midi(self, tempo = 80):
+        track    = 0
+        channel  = 0
+        volume   = 100
+        MyMIDI = MIDIFile(6)  # One track, defaults to format 1 (tempo track is created automatically)
+        time     = 0
+        MyMIDI.addTempo(track, time, tempo)
+        duration = 1/8
+        for index, instance in enumerate(zip(self.onsets,self.midi_notes,self.strings)):
+            onset, midi, string = instance
+            onset_time = onset.prediction*tempo/60
+            print(string.prediction, index)
+            MyMIDI.addNote(string.prediction, channel, midi.prediction, onset_time, duration, volume)
+        
+        
+        with open("major-scale.mid", "wb") as output_file:
+            MyMIDI.writeFile(output_file)
+
+
 def compute_confusion(confusion_matrix, predicted_tablature, true_tablature, onset_window = 0.025, mode = 'ga'):
     for instance in zip(predicted_tablature.onsets,
                         predicted_tablature.midi_notes,
@@ -348,40 +377,44 @@ def compute_confusion(confusion_matrix, predicted_tablature, true_tablature, ons
         instance = [x.prediction for x in instance]
         p_onset, p_midi, p_string, t_onset, t_midi, t_string = instance
         if abs(t_onset - p_onset)<onset_window: # here add to propagate smallest window in case onset should be taken seriously
-            if p_string == 7: # designated the inconclusive
+            
+            if p_midi != t_midi:
                 confusion_matrix[t_string][6] +=1
+            elif p_string == 7: # designated the inconclusive
+                confusion_matrix[t_string][7] +=1
             elif p_midi == t_midi:
                 confusion_matrix[t_string][p_string] +=1
-            else:
-                 raise Exception('The midi values are different something is wrong')
+            
     return confusion_matrix
 
-def compute_confusion_matrixes():
+def compute_confusion_matrixes(how = 'FromCNN'):
     y_classes = ['E','A','D','G','B','e']
-    x_classes = ['E','A','D','G','B','e', 'Inconclusive']
+    x_classes = ['E','A','D','G','B','e', 'wrong_pitch','Inconclusive']
     correct_ga = 0
     correct_rnn = 0
-    confusion_matrix_ga = np.zeros((6,6)) 
-    confusion_matrix_rnn = np.zeros((6,7)) 
+    confusion_matrix_ga = np.zeros((6,7)) 
+    confusion_matrix_rnn = np.zeros((6,8)) 
     jam_list = glob.glob(os.path.join(workspace.annotations_folder, 'single_notes','*solo*.jams'))
- #   jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 3)
-    for jam_name in jam_list:
+ #   jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 2)
+    for index, jam_name in enumerate(jam_list):
+        print('we are at {} % '.format(index/len(jam_list)*100))
     #jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
         x = TrackInstance(jam_name, dataset)
-        x.predict_tablature('FromAnnos')
-        x.get_accuracy_of_prediction('FromAnnos')
+        x.predict_tablature('FromCNN')
+      #  x.get_accuracy_of_prediction('FromCNN')
     #x.rnn_tablature_FromAnnos.tablaturize()
     #x.predicted_tablature_FromAnnos.tablaturize()
-        confusion_matrix_ga = compute_confusion(confusion_matrix_ga, x.predicted_tablature_FromAnnos, x.true_tablature)
-        confusion_matrix_rnn = compute_confusion(confusion_matrix_rnn, x.rnn_tablature_FromAnnos, x.true_tablature)
+        confusion_matrix_ga = compute_confusion(confusion_matrix_ga, x.predicted_tablature_FromCNN, x.true_tablature)
+        confusion_matrix_rnn = compute_confusion(confusion_matrix_rnn, x.rnn_tablature_FromCNN, x.true_tablature)
     for i in range(6):
         correct_ga += confusion_matrix_ga[i][i]
         correct_rnn += confusion_matrix_rnn[i][i]
     accuracy_ga = correct_ga/np.sum(confusion_matrix_ga)
     accuracy_rnn = correct_rnn/np.sum(confusion_matrix_rnn)
+    print(confusion_matrix_rnn)
     print(confusion_matrix_ga)
     title = 'GA Confusion Matrix For ' + dataset + ' Recordings accuracy is ' + str(accuracy_ga)+'No Stop'
-    plot_confusion_matrix(confusion_matrix_ga, y_classes, y_classes,
+    plot_confusion_matrix(confusion_matrix_ga, x_classes[:6], y_classes,
                             normalize = True, title = title)
     title = 'Rnn Confusion Matrix For ' + dataset + ' Recordings accuracy is ' + str(accuracy_rnn)+'No Stop'
     plot_confusion_matrix(confusion_matrix_rnn, x_classes, y_classes,
@@ -391,8 +424,12 @@ def test():
     jam_name = os.path.join(workspace.annotations_folder,'05_BN1-147-Gb_solo.jams')
     x = TrackInstance(jam_name, dataset)
     x.predict_tablature('FromAnnos')
-    x.rnn_tablature_FromAnnos.tablaturize()
+  #  x.rnn_tablature_FromAnnos.tablaturize()
     x.predicted_tablature_FromAnnos.tablaturize()
 
 if __name__ == "__main__":
-    compute_confusion_matrixes()
+    compute_confusion_matrixes(how = 'FromAnnos')
+ # test()
+   # jam_name = os.path.join(workspace.annotations_folder,'05_Rock1-130-A_solo.jams') #05_BN1-147-Gb_solo
+   # x = TrackInstance(jam_name, dataset)
+   # x.true_tablature.output_to_midi()
