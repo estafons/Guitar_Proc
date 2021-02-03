@@ -16,10 +16,15 @@ from matplotlib import lines as mlines, pyplot as plt
 #temp lbiraries not really needed
 import random
 import shutil
+import torch # __greg__
+from model import TCN # __greg__
+from madmom.features.onsets import peak_picking, OnsetPeakPickingProcessor # __greg__
+
+
 
 dataset = 'mic'
 # workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
-workspace = initialize_workspace('./dataset')
+workspace = initialize_workspace('./dataset') # __greg__
 
 # coeff = read_correlate_matrix()
 coeff = (1,1,1,1,1)
@@ -75,6 +80,7 @@ class TrackInstance():
         self.rnn_tablature = None
         self.predicted_strings = None
 
+        self.feats = librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=40, n_fft=2048, hop_length=512) #_greg_
 
 
     def predict_tablature(self, mode = 'FromAnnos'):
@@ -104,6 +110,40 @@ class TrackInstance():
                 strings.append((s[1],1))
             self.predicted_tablature_FromAnnos = Tablature(onset_temp, midi_temp, strings)
             
+        elif mode == 'custom': #__greg__
+            # audio_feats = librosa.feature.melspectrogram(audio_data_mix, sr=args.fs, n_mels=40, n_fft=args.w_size, hop_length=args.hop)
+            ksize=3
+            nhid=256
+            levels=4
+            dropout=0.25
+            dilations=True
+
+
+            # TODO add args as self.
+            def run_final_test(feats, input_type, model=None):
+                model_name = "./models/TCN_Audio_0.pt"
+                model = torch.load(model_name, map_location='cpu')
+                # print(model)
+                with torch.no_grad():
+                    x = feats.transpose(0,1)
+                    output = model(x.unsqueeze(0))               
+                return output
+
+            audio_feats = self.feats
+            audio_feats = torch.Tensor(audio_feats.astype(np.float64))
+            n_audio_channels = [nhid] * levels # e.g. [150] * 4
+            print('Model Running...')
+            model = TCN(40, 2, n_audio_channels, ksize, dropout=dropout, dilations=dilations)
+            output = run_final_test(audio_feats, 'Audio', model)
+            # output = run_final_test(audio_feats, 'Audio')            
+            print('Model Reults ready!!')
+            output = output.squeeze(0).cpu().detach()	
+            print('output', output.size())
+            oframes = peak_picking(activations=output[:,0].numpy(), threshold=0.5, pre_max=2, post_max=2) # madmom method
+            otimes = librosa.core.frames_to_time(oframes, sr=self.sr, n_fft=2048, hop_length=512)            
+            self.predicted_tablature_FromTCN = otimes
+
+
     def read_tablature_from_jams(self):
         str_midi_dict = {0: 40, 1: 45, 2: 50, 3: 55, 4: 59, 5: 64}
         s = 0
@@ -386,16 +426,13 @@ def get_features_and_targets(): # __greg__
         feats = librosa.feature.melspectrogram(x.audio, sr=x.sr, n_mels=n_bands, n_fft=W_SIZE, hop_length=HOP)
         # get track onsets
         onset_times = x.return_onset_times()
-        # print(onset_times) 
+        # get baf i.e. frame ground truth
         onset_frames = librosa.core.time_to_frames(onset_times, sr=x.sr, n_fft=W_SIZE, hop_length=HOP)
         baf = np.array( [np.zeros( feats.shape[1] )]) # length
-
-        # print(baf.shape)
         baf[0, onset_frames] = 1.
         baf = np.swapaxes(baf, 0, 1)
 
         filename = jam_name.split('/')[-1][:-5]
-
         np.savez(path_to_store+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
         npzfile = np.load(path_to_store+filename+'.npz')
 
@@ -436,9 +473,13 @@ def compute_confusion_matrixes():
 
 
 if __name__ == '__main__':
-    get_features_and_targets()
-    # jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
-    # x = TrackInstance(jam_name, dataset)
+    # get_features_and_targets() # __greg__
+
+    jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
+    x = TrackInstance(jam_name, dataset)
+    x.predict_tablature('custom')
+    print(x.predicted_tablature_FromTCN)
+
     # x.predict_tablature('FromAnnos')
     # x.rnn_tablature_FromAnnos.tablaturize()
     # x.predicted_tablature_FromAnnos.tablaturize()

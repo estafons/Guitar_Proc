@@ -44,4 +44,4 @@ Holds the genetic function that takes as input an estimated guitar tab, and uses
 *estim_tab* corresponds to so far estimated tablature, *probability_list* to confidence of the so far predicted values (currently ignored), and *coeff* to coeeficients paired to each playability constraint. (string distance, fret distance, etc)
 
 
-Onset Detection: python music_test.py --epochs 100 --modality Audio --train_fusion False --train True --project_dir ~/fresh-guit-proc/ --feats melspecsolo --ksize 5
+Onset Detection: python music_test.py --epochs 100 --modality Audio --train_fusion False --train True --project_dir ~/fresh-guit-proc/ --feats melspecsolo --ksize 5 --intsr guitar
