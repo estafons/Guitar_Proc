@@ -17,17 +17,19 @@ def init_dict_of_dicts():
 
 def beta_get(init_beta, fret, be12ta): 
    # a = (math.log2(be12ta) - math.log2(init_beta))/2
-    c = be12ta/(init_beta*4)
-   # theory_b = init_beta*2**(fret/6)# or 12?
+    #c = be12ta/(init_beta*4)
+    theory_b = init_beta*2**(fret/6)# or 12?
     #theory_b = init_beta*2**(a*fret/6)
-    theory_b = c*init_beta*2**(fret/6)
+  #  theory_b = c*init_beta*2**(fret/6)
     sigma = theory_b/5
     mu = theory_b
     return random.gauss(mu, sigma)
 
 def simulate_betas():
-    beta_dict={0 : 0.00011735, 1: 8.617*10**(-5), 2 : 4.6731*10**(-5) , 
-                3 : 2.5995*10**(-5) , 4 : 6.438*10**(-5) , 5 : 2.177*10**(-5)}
+  #  beta_dict={0 : 0.00011735, 1: 8.617*10**(-5), 2 : 4.6731*10**(-5) , 
+   #             3 : 2.5995*10**(-5) , 4 : 6.438*10**(-5) , 5 : 2.177*10**(-5)}
+    beta_dict = {0: 0.0002158787137215805, 1 : 0.00011561849853394576, 2 : 6.234748673322851*10**(-5), 3 : 0.00012432745752718314,
+                   4 :  1.9023777880099622*10**(-5), 5 : 6*10**(-6)} #epiphone dict
     be12ta_dict = {0:0.0003, 1:0.0002991, 2: 0.00014958, 3:8.601*10**(-5), 4:0.000228, 5: 8.2273*10**(-5)}
     dict_of_dicts = init_dict_of_dicts()
     for string in range(0,6):

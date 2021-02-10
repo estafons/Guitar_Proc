@@ -57,10 +57,14 @@ class my_signals: #implements methods that all need
         if ff_t is None:
             ff_t = self.ff_t
         freqs = self.frequencies
+        max_peak = 0
         peaks, _  =scipy.signal.find_peaks(np.abs(ff_t),distance=100000)
     #    print(freqs[peaks], ff_t[peaks])
-        temp = range(peaks[0]-1,peaks[0]+2)
-        max_peak = average_peak(([np.abs(x) for x in ff_t[temp]]),list(freqs[temp]))
+        try:
+            temp = range(peaks[0]-1,peaks[0]+2)
+            max_peak = average_peak(([np.abs(x) for x in ff_t[temp]]),list(freqs[temp]))
+        except:
+            print('exception in helper-note-instance get max_freqs occured')
      #   print(max_peak)
         return max_peak
 
