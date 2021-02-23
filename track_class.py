@@ -24,7 +24,16 @@ from madmom.features.onsets import peak_picking, OnsetPeakPickingProcessor # __g
 
 dataset = 'mic'
 # workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
+# workspace = initialize_workspace('./dataset') # __greg__
 workspace = initialize_workspace('./dataset') # __greg__
+
+
+HOP = 441 # 10 ms
+# W_SIZE = 2048
+W_SIZE = 1764
+FS = 44100 
+N_BANDS = 40
+
 
 # coeff = read_correlate_matrix()
 coeff = (1,1,1,1,1)
@@ -73,15 +82,21 @@ class TrackInstance():
         self.track_name = convert_name(jam_name, dataset, 'to_wav')
         self.true_tablature = self.read_tablature_from_jams() # NOTE:
         print(self.track_name)
-        audio, sr = librosa.load(self.track_name, sr=44100, mono=False)
+        audio, sr = librosa.load(self.track_name, sr=FS, mono=False)
+        
         self.audio = audio  # NOTE:
         self.sr = sr
         self.predicted_tablature = None
         self.rnn_tablature = None
         self.predicted_strings = None
 
-        self.feats = librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=40, n_fft=2048, hop_length=512) #_greg_
-
+        self.dur = librosa.get_duration(self.audio, sr=self.sr, n_fft=W_SIZE, hop_length=HOP)
+        self.feats = librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP) #_greg_
+        if '01_BN2-131-B_solo' in jam_name:
+            print('CCCCCCCCCCCCCc', self.dur)
+            print()
+            # aaa
+            # exit(0)
 
     def predict_tablature(self, mode = 'FromAnnos'):
         '''mode --> {From_Annos, FromCNN} first reads 
@@ -118,7 +133,6 @@ class TrackInstance():
             dropout=0.25
             dilations=True
 
-
             # TODO add args as self.
             def run_final_test(feats, input_type, model=None):
                 model_name = "./models/TCN_Audio_0.pt"
@@ -140,7 +154,7 @@ class TrackInstance():
             output = output.squeeze(0).cpu().detach()	
             print('output', output.size())
             oframes = peak_picking(activations=output[:,0].numpy(), threshold=0.5, pre_max=2, post_max=2) # madmom method
-            otimes = librosa.core.frames_to_time(oframes, sr=self.sr, n_fft=2048, hop_length=512)            
+            otimes = librosa.core.frames_to_time(oframes, sr=self.sr, n_fft=W_SIZE, hop_length=HOP)            
             self.predicted_tablature_FromTCN = otimes
 
 
@@ -399,42 +413,61 @@ def compute_confusion(confusion_matrix, predicted_tablature, true_tablature, ons
 
 def get_features_and_targets(): # __greg__
     # jam_list = glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams')
-    HOP = 441 # 10 ms
-    W_SIZE = 2048
-    FS = 44100 # not used
-    n_bands= 40
 
-    # path_to_store = './PrepdData/melspec/Audio/'
-    path_to_store = './Audio/'
+    # Read list of test filenames
+    with open('./names.txt', 'r') as f:
+        TestSet = f.readlines()
+    TestSet = [x.strip() for x in TestSet]
+
+    # print(TestSet)
+    path_to_store = './melspec/'
 
     try: shutil.rmtree(path_to_store)
     except: print('No need to clean old data...')
 
     try: os.mkdir(path_to_store)
     except: print('ERROR: Failed to create new data dir.'); exit(1)
+    os.mkdir(path_to_store+'Train/')
+    os.mkdir(path_to_store+'Test/')
     # except: shutil.rmtree(path_to_store)
 
-
     jam_list = glob.glob(workspace.annotations_folder + '/*.jams')
-    # print(workspace.annotations_folder)
-    # print(jam_list)
     for jam_name in jam_list:
-        if not 'solo' in jam_name: 
-            continue
+        print(jam_name)
+        # if not 'solo' in jam_name: 
+        # if 'solo' in jam_name: 
+        #     continue
         x = TrackInstance(jam_name, dataset)    
         # extract features
-        feats = librosa.feature.melspectrogram(x.audio, sr=x.sr, n_mels=n_bands, n_fft=W_SIZE, hop_length=HOP)
+        # feats = librosa.feature.melspectrogram(x.audio, sr=x.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP)
+        feats = x.feats
         # get track onsets
         onset_times = x.return_onset_times()
+
+        print('onset_times:', onset_times[-1], 'feats:', feats.shape)
+        # aaa
         # get baf i.e. frame ground truth
-        onset_frames = librosa.core.time_to_frames(onset_times, sr=x.sr, n_fft=W_SIZE, hop_length=HOP)
+        onset_frames = librosa.core.time_to_frames(onset_times, sr=x.sr, hop_length=HOP)
+        # onset_frames = librosa.core.time_to_frames(onset_times, sr=x.sr, n_fft=W_SIZE, hop_length=HOP)
         baf = np.array( [np.zeros( feats.shape[1] )]) # length
         baf[0, onset_frames] = 1.
         baf = np.swapaxes(baf, 0, 1)
 
+        # print(baf.shape)
+
+        locations = np.nonzero(baf)[0]
+
+        # print('AAAAAA', onset_frames[-1], locations[-1], onset_times[-1])
+        # print('AAAAAA', onset_frames[-10], locations[-10], onset_times[-10])
+
         filename = jam_name.split('/')[-1][:-5]
-        np.savez(path_to_store+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
-        npzfile = np.load(path_to_store+filename+'.npz')
+        if jam_name.split('/')[-1] in TestSet:
+            print('test')
+            np.savez(path_to_store+'Test/'+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
+        else:
+            np.savez(path_to_store+'Train/'+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
+
+        # npzfile = np.load(path_to_store+filename+'.npz')
 
     return 0
 
@@ -473,12 +506,12 @@ def compute_confusion_matrixes():
 
 
 if __name__ == '__main__':
-    # get_features_and_targets() # __greg__
+    get_features_and_targets() # __greg__
  
-    jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
-    x = TrackInstance(jam_name, dataset)
-    x.predict_tablature('custom')
-    print(x.predicted_tablature_FromTCN)
+    # jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
+    # x = TrackInstance(jam_name, dataset)
+    # x.predict_tablature('custom')
+    # print(x.predicted_tablature_FromTCN)
 
     # x.predict_tablature('FromAnnos')
     # x.rnn_tablature_FromAnnos.tablaturize()
