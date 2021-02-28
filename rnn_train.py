@@ -50,7 +50,7 @@ def train_models(dict_of_dicts):
             X = np.array(X)
             y = np.array(y)
             neigh.fit(X.reshape(-1, 1), y)
-            filename = os.path.join(workspace.model_folder, str(midi_key) + '_rrn_model.sav')
+            filename = os.path.join(workspace.model_folder, str(midi_key) + 'rrn_model.sav')
             pickle.dump(neigh, open(filename, 'wb'))
         else:
             pass

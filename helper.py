@@ -297,7 +297,8 @@ def determine_string(track):
 
 def determine_combinations(f_cand): # returns all posible ways to play a candidate fundamental
     ret = []
-    fret_range = [range(40,53),range(45,58),range(50,63),range(55,68),range(59,72),range(64,77)]
+   # fret_range = [range(40,53),range(45,58),range(50,63),range(55,68),range(59,72),range(64,77)]
+    fret_range = [range(40,57),range(45,52),range(50,67),range(55,72),range(59,76),range(64,79)]
     midi_f_cand = round(12*math.log(f_cand/440,2)+69)
     for index, x in enumerate(fret_range):
         if midi_f_cand in list(x):

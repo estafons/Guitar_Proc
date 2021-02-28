@@ -6,7 +6,7 @@ import soundfile as sf
 import numpy as np
 from midiutil import MIDIFile
 from madmom.audio.filters import hz2midi, midi2hz
-#from madmom.evaluation.onsets import onset_evaluation
+from madmom.evaluation.onsets import onset_evaluation, OnsetEvaluation
 #from madmom.features.onsets import CNNOnsetProcessor, OnsetPeakPickingProcessor
 import crepe
 import glob
@@ -33,6 +33,15 @@ coeff = (1,1,1,1,1)
 print(coeff)
 c_est = sum(coeff)/len(coeff)
 print(c_est)
+
+
+
+HOP = 441 # 10 ms
+# W_SIZE = 2048
+W_SIZE = 1764
+FS = 44100 
+N_BANDS = 40
+
 
 def convert_name(name, dataset = None, mode = 'to_wav'):
     '''modes --> {to_wav, to_jams}
@@ -68,7 +77,6 @@ def convert_name(name, dataset = None, mode = 'to_wav'):
 
 
 
-
 class TrackInstance():
     def __init__(self, jam_name, dataset, AnnosMode = True): #, dataset
         if AnnosMode:
@@ -92,104 +100,18 @@ class TrackInstance():
             self.predicted_tablature = None
             self.rnn_tablature = None
             self.predicted_strings = None
-        self.feats = librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=40, n_fft=2048, hop_length=480)     
 
+        self.Feats = []
+        if len(self.audio.shape) > 1:  # mulitchannel
+            for i in range(0,self.audio.shape[0]): 
+                self.Feats += [ librosa.feature.melspectrogram(self.audio[i,:], sr=self.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP) ] #_greg_
+        else: # mono
+            self.Feats += [ librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP) ] #_greg_
+        
+        # print(len(self.Feats))
 
-
-    def predict_tablature(self, mode = 'FromAnnos'):
-        '''mode --> {From_Annos, FromCNN} first reads 
-        from annotations onset-pitch second estimates'''
-        strings = []
-        if mode == 'FromCNN':
-            onsets, midi_notes = self.predict_notes_onsets()
-            print('time of track is ', librosa.get_duration(self.audio, self.sr))
-            self.temp_tablature = Tablature(onsets, midi_notes, [(1,1) for x in onsets])
-            estim_tab, probs = self.rnn_predict_strings()
-            temp = [(x[1],1) for x in estim_tab]
-            self.rnn_tablature_FromCNN = Tablature(onsets, midi_notes, temp)
-            fin_tab, gen = genetic(estim_tab, probs, coeff)
-            for s in fin_tab:
-                strings.append((s[1],1))
-            self.predicted_tablature_FromCNN = Tablature(onsets, midi_notes, strings)
-        elif mode == 'OnsetAnnos':
-            onsets, midi_notes = self.predict_notes_onsets()
-            onsets = [(x.prediction, 1) for x in self.true_tablature.onsets]
-            #print('time of track is ', librosa.get_duration(self.audio, self.sr))
-            self.temp_tablature = Tablature(onsets, midi_notes, [(1,1) for x in onsets])
-            estim_tab, probs = self.rnn_predict_strings()
-            temp = [(x[1],1) for x in estim_tab]
-            self.rnn_tablature_FromCNN = Tablature(onsets, midi_notes, temp)
-            fin_tab, gen = genetic(estim_tab, probs, coeff)
-
-            for s in fin_tab:
-                strings.append((s[1],1))
-            self.predicted_tablature_OnsetAnnos = Tablature(onsets, midi_notes, strings)
-        elif mode == 'FromAnnos':
-            self.temp_tablature = self.true_tablature
-            estim_tab, probs = self.rnn_predict_strings()
-            string_temp = [(x[1],max(p)) for x,p in zip(estim_tab,probs)]
-            onset_temp = [(x[-2],1) for x in estim_tab]
-            midi_temp = [(x[0],1) for x in estim_tab]
-            self.rnn_tablature_FromAnnos = Tablature(onset_temp, midi_temp, string_temp)
-            fin_tab, gen = genetic(estim_tab, probs, coeff)
-            for s in fin_tab:
-                strings.append((s[1],1))
-            self.predicted_tablature_FromAnnos = Tablature(onset_temp, midi_temp, strings)
-
-    def get_onsets(self):
-    
-        # audio_feats = librosa.feature.melspectrogram(audio_data_mix, sr=args.fs, n_mels=40, n_fft=args.w_size, hop_length=args.hop)
-        ksize=3
-        nhid=256
-        levels=4
-        dropout=0.25
-        dilations=True
-        # TODO add args as self.
-        def run_final_test(feats, input_type, model=None):
-            model_name = "./models/TCN_Audio_0.pt"
-            model = torch.load(model_name, map_location='cpu')
-            # print(model)
-            with torch.no_grad():
-                x = feats.transpose(0,1)
-                output = model(x.unsqueeze(0))
-            return output
-
-        audio_feats = self.feats
-        audio_feats = torch.Tensor(audio_feats.astype(np.float64))
-        n_audio_channels = [nhid] * levels # e.g. [150] * 4
-        print('Model Running...')
-        model = TCN(40, 2, n_audio_channels, ksize, dropout=dropout, dilations=dilations)
-        output = run_final_test(audio_feats, 'Audio', model)
-        # output = run_final_test(audio_feats, 'Audio')
-        print('Model Reults ready!!')
-        output = output.squeeze(0).cpu().detach()
-        print('output', output.size())
-        oframes = peak_picking(activations=output[:,0].numpy(), threshold=0.5, pre_max=2, post_max=2) # madmom method
-        otimes = librosa.core.frames_to_time(oframes, sr=self.sr, n_fft=2048, hop_length=480)
-        end_time = librosa.get_duration(self.audio, self.sr) 
-        onsets = [(round(x,2), 1) for x  in otimes if x<(end_time-0.05)] # problem with out of time onsets
-      #  print(onsets)
-        self.predicted_tablature_FromTCN = Tablature(onsets, [(1,1) for x in onsets], [(1,1) for x in onsets])
-        return onsets
-
-
-
-    def return_onset_times(self): # __greg__
-        tablature =  self.true_tablature
-        trackOnsets = []
-        # print('tablature:', tablature)
-        for instance in zip(tablature.onsets, tablature.midi_notes, tablature.strings):    
-            # print('AAAAAAAA')    
-            onset, midi_note, string = instance
-            # print(onset.prediction)
-            trackOnsets.append(onset.prediction)
-            # offset = onset.prediction + 0.06 # TODO: check again
-            # start = int(round(onset.prediction*(self.sr)))
-            # end = int(round(offset*(self.sr)))
-            # instance_data = self.audio[start:end] #NOTE: use mono chanel
-            # print(onset.prediction)
-        return np.array(trackOnsets)
-
+        self.feats = self.Feats[0]
+  
 
     def read_tablature_from_jams(self):
         str_midi_dict = {0: 40, 1: 45, 2: 50, 3: 55, 4: 59, 5: 64}
@@ -220,17 +142,91 @@ class TrackInstance():
             strings.append((instance[1], 1))
 
         return Tablature(onsets, midi_notes, strings)
+
+    def predict_tablature(self, onset = 'FromAnnos', pitch = 'FromAnnos', method = 'rrn_model.sav'):
+        '''mode --> {From_Annos, FromCNN} first reads 
+        from annotations onset-pitch second estimates'''
+        strings = []
+        if onset == 'FromAnnos':
+            onsets = [(x.prediction, 1) for x in self.true_tablature.onsets]
+        elif onset == 'TCN':
+            onsets = self.get_onsets()
+        if pitch == 'FromAnnos':
+            if onset == 'FromAnnos':
+                midi_notes = [(x.prediction, 1) for x in self.true_tablature.midi_notes]
+            else:
+                midi_notes = self.match_midi_notes(onsets)
+        elif pitch == 'Crepe':
+            midi_notes = self.predict_notes_at_time(onsets)
+
+        self.temp_tablature = Tablature(onsets, midi_notes, [(1,1) for x in onsets])
+        estim_tab, probs = self.rnn_predict_strings(method = method)
+        temp = [(x[1],1) for x in estim_tab]
+        self.rnn_tablature = Tablature(onsets, midi_notes, temp)
+        fin_tab, gen = genetic(estim_tab, probs, coeff)
+        for s in fin_tab:
+            strings.append((s[1],1))
+        self.predicted_tablature = Tablature(onsets, midi_notes, strings)
+
+    def match_midi_notes(self, onsets):
+        midi_notes = []
+        for onset in onsets:
+            print(onset[0])
+            p_onset, p_midi, p_string = match_onset(onset[0], self.true_tablature)
+            print(p_onset, p_midi, p_string)
+            if (p_onset, p_midi, p_string) != (1,1,1):
+                midi_notes.append((p_midi,1))
+        return midi_notes
+
+            
+
+
+    def get_onsets(self):
     
-    def predict_onsets(self):
-     #   proc_0 = CNNOnsetProcessor()
-     #   proc_1 = OnsetPeakPickingProcessor(threshold = 0.95,fps=100)
-      #  predicts = proc_1(proc_0(self.track_name))
+        ksize=3
+        nhid=256
+        levels=4
+        dropout=0.25
+        dilations=True
 
-        #=====manually adding true onsets
-        predicts = [onset.prediction for onset in self.true_tablature.onsets]
-        #====
+        # TODO add args as self.
+        def run_final_test(feats, input_type, model=None):
+            model_name = "./models/TCN_Audio_0.pt"
+            model = torch.load(model_name, map_location='cpu')
+            # print(model)
+            with torch.no_grad():
+                x = feats.transpose(0,1)
+                output = model(x.unsqueeze(0))               
+            return output
 
-        return list(zip(predicts, [1]*len(predicts))) # here correct it when i can get confidence
+        audio_feats = self.feats
+        audio_feats = torch.Tensor(audio_feats.astype(np.float64))
+        n_audio_channels = [nhid] * levels # e.g. [150] * 4
+        print('\nModel Running...')
+        model = TCN(40, 2, n_audio_channels, ksize, dropout=dropout, dilations=dilations)
+        output = run_final_test(audio_feats, 'Audio', model)
+        # output = run_final_test(audio_feats, 'Audio')            
+        print('\nModel Reults ready!!')
+        output = output.squeeze(0).cpu().detach()	
+        print('output', output.size())
+        oframes = peak_picking(activations=output[:,0].numpy(), threshold=0.5, pre_max=2, post_max=2) # madmom method
+        otimes = librosa.core.frames_to_time(oframes, sr=self.sr, hop_length=HOP)  
+        annotations = self.return_onset_times()
+        evalu = OnsetEvaluation(otimes, annotations, window=0.025)
+        print("\n", evalu)
+          
+        onsets = [(x, 1) for x in otimes]
+        return onsets
+
+
+    def return_onset_times(self): # __greg__
+        tablature =  self.true_tablature
+        trackOnsets = []
+        for instance in zip(tablature.onsets, tablature.midi_notes, tablature.strings):        
+            onset, midi_note, string = instance
+            trackOnsets.append(onset.prediction)
+
+        return np.array(trackOnsets)
 
     def predict_notes_at_time(self,onsets):
         midi_notes = []
@@ -255,16 +251,7 @@ class TrackInstance():
             midi_notes.append((round(hz2midi(frequency[f_ind])), confidence[f_ind]))
         return midi_notes
 
-    def predict_notes_onsets(self):
-        onsets = self.predict_onsets() #here for madmom here change from true tab to tcn
-        #onsets = self.get_onsets()
-        print(onsets)
-       # onsets = [(x.prediction, 1) for x in self.true_tablature.onsets] # test only pitch detection
-        midi_notes = self.predict_notes_at_time(onsets)
-        return onsets, midi_notes
-
-
-    def rnn_predict_strings(self, mode = 'gnb'):
+    def rnn_predict_strings(self, mode = 'rnn', method = 'rrn_model.sav'):
     #initializations
         cnt_g, cnt_b = 0, 0
         
@@ -277,7 +264,7 @@ class TrackInstance():
         #load models rnn
         if mode == 'rnn':
             for midi in range(40,82):
-                filename = os.path.join(workspace.model_folder, str(midi) + 'exp_rrn_model.sav')
+                filename = os.path.join(workspace.model_folder, str(midi) + method)
                 try:
                     neigh_dict[midi] = pickle.load(open(filename, 'rb'))
                 except FileNotFoundError:
@@ -299,7 +286,7 @@ class TrackInstance():
         #load models bayes
         else:
             for midi in range(40,82):
-                filename = os.path.join(workspace.model_folder, str(midi) + 'gnb_model.sav')
+                filename = os.path.join(workspace.model_folder, str(midi) + method) #gnb
                 try:
                     neigh_dict[midi] = pickle.load(open(filename, 'rb'))
                 except FileNotFoundError:
@@ -349,46 +336,13 @@ class TrackInstance():
                     sf.write(os.path.join(workspace.workspace_folder,'bad', str(cnt_b) + 'bad'+str(midi_note.prediction) +'.wav'), instance_data, self.sr, 'PCM_24')
 
         return estim_tab, probability_list
-    
-    def get_accuracy_of_prediction(self, mode = 'FromAnnos'):
-        if mode == 'FromAnnos':
-            tab = self.rnn_tablature_FromAnnos
-            rnn_tp = [onset.prediction for (onset, t_string, p_string) 
-                                            in zip(self.true_tablature.onsets, 
-                                                self.true_tablature.strings, tab.strings)
-                                                    if t_string.prediction == p_string.prediction]
-            
-            inconclusive = [onset.prediction for (onset, t_string, p_string) 
-                                in zip(self.true_tablature.onsets, 
-                                    self.true_tablature.strings, tab.strings)
-                                        if p_string.prediction == 7]
-
-            print('accuracy of rnn is {} and inconclusive are {}'.format(len(rnn_tp)/tab.tab_len, len(inconclusive)/tab.tab_len))
-            tab = self.predicted_tablature_FromAnnos
-            ga_tp = [onset.prediction for (onset, t_string, p_string) 
-                                            in zip(self.true_tablature.onsets, 
-                                                self.true_tablature.strings, tab.strings)
-                                                    if t_string.prediction == p_string.prediction]
-            print('accuracy of ga is {}'.format(len(ga_tp)/tab.tab_len))
-        elif mode == 'FromCNN':
-            tab = self.predicted_tablature_FromCNN
-            pre_on = [onset.prediction for onset in tab.onsets]
-            tru_on = [onset.prediction for onset in self.true_tablature.onsets]
-            tp, fp, tn, fn, errors = onset_evaluation(
-                                                    pre_on, tru_on,
-                                                        window = 0.025)
-            recall = len(tp)/(len(tp)+len(fn))
-            precision = len(tp)/(len(tp)+len(fp))
-            f1_measure = 2*recall*precision/(recall+precision)
-            print('onsets recall is {} and precision is {} and f1_measure is {}'.format(recall, precision, f1_measure))
-            
 
 class Predictions():
-        def __init__(self, tup):
-            prediction, confidence = tup
-            self.prediction = prediction
-            self.confidence = confidence
-            return None
+    def __init__(self, tup):
+        prediction, confidence = tup
+        self.prediction = prediction
+        self.confidence = confidence
+        return None
 
 class Onset(Predictions):
     def some_func():
@@ -464,6 +418,7 @@ class Tablature():
         with open("epiphone.mid", "wb") as output_file:
             MyMIDI.writeFile(output_file)
 
+
 def match_onset(onset, tablature):
     for instance in zip(tablature.onsets,
                         tablature.midi_notes,
@@ -475,7 +430,7 @@ def match_onset(onset, tablature):
     print('onset not found')
     return (1,1,1) # onset not found
 
-def compute_confusion_2(confusion_matrix, predicted_tablature, true_tablature, onset_window = 0.025, mode = 'ga'):
+def compute_confusion_2(confusion_matrix, predicted_tablature, true_tablature, onset_window = 0.025, mode = 'ga', true_onset = 0):
     # fix onsets checking before. Keep only the true tablature onsets, and designate wrong onset in case of difference
     false_negative = 0
     for instance in zip(true_tablature.onsets, true_tablature.midi_notes,
@@ -484,6 +439,7 @@ def compute_confusion_2(confusion_matrix, predicted_tablature, true_tablature, o
         t_onset, t_midi, t_string = instance
         p_onset, p_midi, p_string = match_onset(t_onset, predicted_tablature)
         if (p_onset, p_midi, p_string) != (1,1,1):
+            true_onset += 1
       #  if abs(t_onset - p_onset)<onset_window: # here add to propagate smallest window in case onset should be taken seriously
             if p_midi != t_midi:
                 confusion_matrix[t_string][6] +=1
@@ -495,7 +451,11 @@ def compute_confusion_2(confusion_matrix, predicted_tablature, true_tablature, o
             confusion_matrix[0][7] += 1
             false_negative += 1
             print('false negatives are ', false_negative)
-    return confusion_matrix
+    
+    return confusion_matrix, true_onset
+
+def f_measure_calculator(predicted_tablature, true_tablature):
+    pass
 
 def compute_confusion(confusion_matrix, predicted_tablature, true_tablature, onset_window = 0.025, mode = 'ga'):   
     for instance in zip(predicted_tablature.onsets,
@@ -512,149 +472,72 @@ def compute_confusion(confusion_matrix, predicted_tablature, true_tablature, ons
                 confusion_matrix[t_string][7] +=1
             elif p_midi == t_midi:
                 confusion_matrix[t_string][p_string] +=1
-            
+        
     return confusion_matrix
 
-def compute_confusion_matrixes():
+def compute_confusion_matrixes(md = 'FromAnnos', OnsetMethod = 'TCN'):
     y_classes = ['E','A','D','G','B','e']
-    x_classes = ['E','A','D','G','B','e', 'wrong_pitch','Inconclusive']#,'false_neg_ons'
-    correct_ga = 0
-    correct_rnn = 0
-    confusion_matrix_ga = np.zeros((6,7)) 
-    confusion_matrix_rnn = np.zeros((6,8)) 
-    jam_list = glob.glob(os.path.join(workspace.annotations_folder, 'single_notes','*solo*.jams'))
-  #  jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 2)
-    for index, jam_name in enumerate(jam_list):
-        print('we are at {} % '.format(index/len(jam_list)*100))
-    #jam_name = workspace.annotations_folder+'/05_BN1-147-Gb_solo.jams'
-        x = TrackInstance(jam_name, dataset)
-        x.predict_tablature('FromAnnos')
-      #  x.get_accuracy_of_prediction('FromCNN')
-    #x.rnn_tablature_FromAnnos.tablaturize()
-    #x.predicted_tablature_FromAnnos.tablaturize()
-        confusion_matrix_ga = compute_confusion(confusion_matrix_ga, x.predicted_tablature_FromAnnos, x.true_tablature)
-        confusion_matrix_rnn = compute_confusion(confusion_matrix_rnn, x.rnn_tablature_FromAnnos, x.true_tablature)
-        print(confusion_matrix_ga)
-    for i in range(6):
-        correct_ga += confusion_matrix_ga[i][i]
-        correct_rnn += confusion_matrix_rnn[i][i]
-    accuracy_ga = correct_ga/np.sum(confusion_matrix_ga)
-    accuracy_rnn = correct_rnn/np.sum(confusion_matrix_rnn)
-    print(confusion_matrix_rnn)
-    print(confusion_matrix_ga)
-    title = 'GA Confusion Matrix For +0.02' + dataset + ' Recordings accuracy is ' + str(accuracy_ga)
-    plot_confusion_matrix(confusion_matrix_ga, x_classes[:6], y_classes,
-                            normalize = True, title = title)
-    title = 'Rnn Confusion Matrix For +0.02' + dataset + ' Recordings accuracy is ' + str(accuracy_rnn)
-    plot_confusion_matrix(confusion_matrix_rnn, x_classes, y_classes,
-                            normalize = True, title = title)
-
-class cnt_help():
-    def __init__(self):
-        self.cStringWrMidi = 0
-        self.cMidiWrString = 0
-        self.CStringCMidi = 0
-        self.cMidiInc = 0
-        self.wrMidiInc = 0
-        self.wrStringWrMidi = 0
-        self.total = 0
-
-def compare_tabs(AnnosTab, OnsetTab, TrueTab, cnt):
-    for instance in zip(AnnosTab.midi_notes, AnnosTab.strings,
-                             OnsetTab.midi_notes, OnsetTab.strings, 
-                             TrueTab.midi_notes, TrueTab.strings):
-        instance = [x.prediction for x in instance]
-        a_midi,a_string, o_midi, o_string, t_midi, t_string = instance
-        if t_midi == o_midi:
-            if o_string == 7:
-                cnt.cMidiInc += 1
-            elif t_string == o_string:
-                cnt.CStringCMidi += 1
-            elif t_string != o_string:
-                cnt.cMidiWrString += 1
-        elif t_midi != o_midi:
-            if a_string == 7:
-                cnt.wrMidiInc += 1
-            elif t_string == a_string: # check from annotations here so that wrong midi doesnt affect
-                cnt.cStringWrMidi += 1
-            elif t_string != a_string:
-                cnt.wrStringWrMidi += 1
-        cnt.total += 1
-    return cnt
-
-
-
-def correlate_string_midi():
+    
+    x_classes = ['E','A','D','G','B','e', 'wrong_pitch','false_neg_ons','Inconclusive']#,'false_neg_ons'
+    
     jam_list = glob.glob(os.path.join(workspace.annotations_folder, 'single_notes','*solo*.jams'))
   #  jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 1)
-    cnt = cnt_help()
-    for index, jam_name in enumerate(jam_list):
-        print('we are at {} % '.format(index/len(jam_list)*100))
-        x = TrackInstance(jam_name, dataset)
-        x.predict_tablature('OnsetAnnos')
-        x.predict_tablature('FromAnnos')
-        cnt = compare_tabs(x.rnn_tablature_FromAnnos, x.rnn_tablature_FromCNN, x.true_tablature, cnt)
-        print('wrong midi wrong string is {}percent of wrong midi correct string is {} correct midi wrong string {} correct midi correct string {} correct midi inconclusive {} wrong midi inconclusive {} and total number of notes{}'.format(cnt.wrStringWrMidi* 100/cnt.total, cnt.cStringWrMidi* 100/cnt.total , cnt.cMidiWrString * 100/cnt.total, cnt.CStringCMidi* 100/cnt.total,cnt.cMidiInc*100/cnt.total, cnt.wrMidiInc*100/cnt.total, cnt.total))
-    
-
-def test():                                           
-    jam_name = os.path.join(workspace.annotations_folder,'05_BN1-147-Gb_solo.jams')
-    x = TrackInstance(jam_name, dataset)
-    x.predict_tablature('FromAnnos')
-  #  x.rnn_tablature_FromAnnos.tablaturize()
-    x.predicted_tablature_FromAnnos.tablaturize()
-
-def conf_pitch(predicted_tablature, true_tablature, conf_pitch_m):
-
-    for instance in zip(predicted_tablature.onsets,
-                        predicted_tablature.midi_notes,
-                            predicted_tablature.strings,
-                            true_tablature.onsets, true_tablature.midi_notes,
-                             true_tablature.strings):
-        instance = [x.prediction for x in instance]
-        p_onset, p_midi, p_string, t_onset, t_midi, t_string = instance
-        #if p_midi>39 and p_midi<73:
-        if p_midi == t_midi:
-            conf_pitch_m[0][0] += 1
-        elif abs(p_midi - t_midi) == 1:
-            conf_pitch_m[0][1] += 1
-        elif (p_midi - t_midi)%12 == 0:
-            conf_pitch_m[0][2] += 1
+    for method in ['gnb_model.sav','exp_gnb_model.sav','linear_gnb_model.sav']: #
+        correct_ga = 0
+        correct_rnn = 0
+        true_onset = 0
+        confusion_matrix_ga = np.zeros((6,8)) 
+        confusion_matrix_rnn = np.zeros((6,9)) 
+        for index, jam_name in enumerate(jam_list):
+            print('we are at {} % '.format(index/len(jam_list)*100))
+            x = TrackInstance(jam_name, dataset)
+            x.predict_tablature(onset = OnsetMethod, pitch = md, method = method)
+            if md == 'Crepe':
+                pass
+            if  OnsetMethod == 'TCN':
+                confusion_matrix_ga, _ = compute_confusion_2(confusion_matrix_ga, x.predicted_tablature, x.true_tablature, true_onset = true_onset)
+                confusion_matrix_rnn, true_onset = compute_confusion_2(confusion_matrix_rnn, x.rnn_tablature, x.true_tablature,  true_onset = true_onset)
+            else:
+                confusion_matrix_ga = compute_confusion(confusion_matrix_ga, x.predicted_tablature, x.true_tablature)
+                confusion_matrix_rnn = compute_confusion(confusion_matrix_rnn, x.rnn_tablature, x.true_tablature)
+            print(confusion_matrix_ga)
+        for i in range(6):
+            correct_ga += confusion_matrix_ga[i][i]
+            correct_rnn += confusion_matrix_rnn[i][i]
+        print(confusion_matrix_ga[:,-1])
+        wr_pitch = np.sum(confusion_matrix_ga[:,-1])
+        print(wr_pitch)
+        tot = np.sum(confusion_matrix_ga) - wr_pitch
+        tdr_ga = correct_ga/tot
+        tdr_rnn = correct_rnn/tot
+        print(tdr_ga)
+        accuracy_ga = round(correct_ga/np.sum(confusion_matrix_ga), 3)
+        accuracy_rnn = round(correct_rnn/np.sum(confusion_matrix_rnn), 3)
+        print(confusion_matrix_rnn)
+        print(confusion_matrix_ga)
+        if OnsetMethod == 'TCN':
+            tdrosga = correct_ga/true_onset
+            print(true_onset, correct_ga)
+            tdrosrnn = correct_rnn/true_onset
+            tdropga = tot/true_onset
+            tdrpsga = correct_ga/tot
+            title = 'GA_' + method[:3] + dataset + ' accuracy_is ' + str(accuracy_ga)+'TDROS_is ' + str(tdrosga) + 'TDROP_is ' + str(tdropga) + 'TDRPS_is ' + str(tdrpsga)
+            plot_confusion_matrix(confusion_matrix_ga, x_classes[:6], y_classes,
+                                    normalize = True, title = title)
+            title = 'gnb_' + method[:3] +  dataset + ' accuracy ' + str(accuracy_rnn) +'TDROS ' + str(tdrosrnn)
+            plot_confusion_matrix(confusion_matrix_rnn, x_classes, y_classes,
+                                    normalize = True, title = title)
         else:
-            conf_pitch_m[0][3] += 1
-    print(conf_pitch_m)
-    return conf_pitch_m
-
-def check_pitch():
-    x_classes = ['correct', 'wrong by 1', 'wrong by octave', 'wrong by more']
-    conf_pitch_m = np.zeros((1,4))
-    jam_list = glob.glob(os.path.join(workspace.annotations_folder, 'single_notes','*solo*.jams'))
-   # jam_list = random.choices(glob.glob(workspace.annotations_folder + '/single_notes/*solo*.jams'), k = 1)
-    cnt = cnt_help()
-    for index, jam_name in enumerate(jam_list):
-        print('we are at {} % '.format(index/len(jam_list)*100))
-        x = TrackInstance(jam_name, dataset)
-        x.predict_tablature('OnsetAnnos')
-        conf_pitch_m = conf_pitch(x.predicted_tablature_OnsetAnnos, x.true_tablature, conf_pitch_m)
-    
-    accuracy_pitch = np.trace(conf_pitch_m)
-    print(conf_pitch_m)
-    title = 'Pitch confusion Matrix For ' + dataset + ' Recordings accuracy is ' + str(accuracy_pitch)+'No Stop'
-    plot_confusion_matrix(conf_pitch_m, x_classes, x_classes[:1],
-                            normalize = True, title = title)
+            title = 'GA_0.02' + method[:3] + dataset + ' accuracy_is ' + str(accuracy_ga)+'TDR_is ' + str(tdr_ga)
+            plot_confusion_matrix(confusion_matrix_ga, x_classes[:6], y_classes,
+                                    normalize = True, title = title)
+            title = 'gnb_0.02' + method[:3] +  dataset + ' accuracy_is ' + str(accuracy_rnn) +'TDR_is ' + str(tdr_rnn)
+            plot_confusion_matrix(confusion_matrix_rnn, x_classes, y_classes,
+                                    normalize = True, title = title)
 
 
 
 if __name__ == "__main__":
-   # correlate_string_midi()
-   # check_pitch()
-    compute_confusion_matrixes()
- # test()
-   # jam_name = os.path.join(workspace.annotations_folder,'05_Rock1-130-A_solo.jams') #05_BN1-147-Gb_solo
-    
-    '''x = TrackInstance(os.path.join('C:\\','Users','stefa','Documents','guit_workspace',
-                                    'IDMT-SMT-GUITAR_V2', 'dataset2','audio',
-                                        'AR_A_fret_0-20.wav'), dataset, AnnosMode = False)
-    x.predict_tablature('FromCNN')
-    x.predicted_tablature_FromCNN.tablaturize()
-    x.predicted_tablature_FromCNN.output_to_midi()'''
+    for s in ['Crepe']:#'FromAnnos', 
+        compute_confusion_matrixes(s)
+
