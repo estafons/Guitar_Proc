@@ -4,7 +4,7 @@ import jams
 import librosa
 import numpy as np
 from madmom.audio.filters import hz2midi
-from madmom.evaluation.onsets import onset_evaluation
+from madmom.evaluation.onsets import onset_evaluation, OnsetEvaluation
 from madmom.features.onsets import CNNOnsetProcessor, OnsetPeakPickingProcessor
 import crepe
 import warnings
@@ -19,10 +19,15 @@ import shutil
 import torch # __greg__
 from model import TCN # __greg__
 from madmom.features.onsets import peak_picking, OnsetPeakPickingProcessor # __greg__
+# from madmom.evaluation import onsets
+# print(onsets)
 
 
+# dataset = 'mix'
+# dataset = 'hex'
+dataset = 'hex_cln'
+# dataset = 'mic'
 
-dataset = 'mic'
 # workspace = initialize_workspace('/media/estfa/10dcab7d-9e9c-4891-b237-8e2da4d5a8f2/data_2')
 # workspace = initialize_workspace('./dataset') # __greg__
 workspace = initialize_workspace('./dataset') # __greg__
@@ -91,12 +96,25 @@ class TrackInstance():
         self.predicted_strings = None
 
         self.dur = librosa.get_duration(self.audio, sr=self.sr, n_fft=W_SIZE, hop_length=HOP)
-        self.feats = librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP) #_greg_
-        if '01_BN2-131-B_solo' in jam_name:
-            print('CCCCCCCCCCCCCc', self.dur)
-            print()
-            # aaa
-            # exit(0)
+        
+
+        # print(len(self.audio.shape))
+
+        self.Feats = []
+        if len(self.audio.shape) > 1:  # mulitchannel
+            for i in range(0,self.audio.shape[0]): 
+                self.Feats += [ librosa.feature.melspectrogram(self.audio[i,:], sr=self.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP) ] #_greg_
+        else: # mono
+            self.Feats += [ librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP) ] #_greg_
+        
+        # print(len(self.Feats))
+
+        self.feats = self.Feats[0]
+        # self.feats = librosa.feature.melspectrogram(self.audio, sr=self.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP) #_greg_
+        # # self.feats = librosa.cqt(self.audio, sr=self.sr, n_bins=N_BANDS, hop_length=HOP) #_greg_
+        # if '01_BN2-131-B_solo' in jam_name:
+            # print('CCCCCCCCCCCCCc', self.dur)
+            # print()
 
     def predict_tablature(self, mode = 'FromAnnos'):
         '''mode --> {From_Annos, FromCNN} first reads 
@@ -146,15 +164,18 @@ class TrackInstance():
             audio_feats = self.feats
             audio_feats = torch.Tensor(audio_feats.astype(np.float64))
             n_audio_channels = [nhid] * levels # e.g. [150] * 4
-            print('Model Running...')
+            print('\nModel Running...')
             model = TCN(40, 2, n_audio_channels, ksize, dropout=dropout, dilations=dilations)
             output = run_final_test(audio_feats, 'Audio', model)
             # output = run_final_test(audio_feats, 'Audio')            
-            print('Model Reults ready!!')
+            print('\nModel Reults ready!!')
             output = output.squeeze(0).cpu().detach()	
             print('output', output.size())
             oframes = peak_picking(activations=output[:,0].numpy(), threshold=0.5, pre_max=2, post_max=2) # madmom method
-            otimes = librosa.core.frames_to_time(oframes, sr=self.sr, n_fft=W_SIZE, hop_length=HOP)            
+            otimes = librosa.core.frames_to_time(oframes, sr=self.sr, hop_length=HOP)            
+            annotations = x.return_onset_times()
+            evalu = OnsetEvaluation(otimes, annotations, window=0.025)
+            print("\n", evalu)
             self.predicted_tablature_FromTCN = otimes
 
 
@@ -420,7 +441,7 @@ def get_features_and_targets(): # __greg__
     TestSet = [x.strip() for x in TestSet]
 
     # print(TestSet)
-    path_to_store = './melspec/'
+    path_to_store = './melspec_'+dataset+'/'
 
     try: shutil.rmtree(path_to_store)
     except: print('No need to clean old data...')
@@ -438,34 +459,40 @@ def get_features_and_targets(): # __greg__
         # if 'solo' in jam_name: 
         #     continue
         x = TrackInstance(jam_name, dataset)    
-        # extract features
-        # feats = librosa.feature.melspectrogram(x.audio, sr=x.sr, n_mels=N_BANDS, n_fft=W_SIZE, hop_length=HOP)
-        feats = x.feats
+
+        # feats = x.feats
+        Feats = x.Feats
+
         # get track onsets
         onset_times = x.return_onset_times()
 
-        print('onset_times:', onset_times[-1], 'feats:', feats.shape)
-        # aaa
+        # print('onset_times:', onset_times[-1], 'feats:', feats.shape)
+
         # get baf i.e. frame ground truth
         onset_frames = librosa.core.time_to_frames(onset_times, sr=x.sr, hop_length=HOP)
-        # onset_frames = librosa.core.time_to_frames(onset_times, sr=x.sr, n_fft=W_SIZE, hop_length=HOP)
-        baf = np.array( [np.zeros( feats.shape[1] )]) # length
+        baf = np.array( [np.zeros( x.feats.shape[1] )]) # length
         baf[0, onset_frames] = 1.
         baf = np.swapaxes(baf, 0, 1)
 
         # print(baf.shape)
-
-        locations = np.nonzero(baf)[0]
-
-        # print('AAAAAA', onset_frames[-1], locations[-1], onset_times[-1])
+        # locations = np.nonzero(baf)[0]
+        # print('AAAAAA', onset_frames[-1], locations[-1], onset_times[-1]) NOTE: locations != onset_times ...
         # print('AAAAAA', onset_frames[-10], locations[-10], onset_times[-10])
 
         filename = jam_name.split('/')[-1][:-5]
-        if jam_name.split('/')[-1] in TestSet:
-            print('test')
-            np.savez(path_to_store+'Test/'+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
-        else:
-            np.savez(path_to_store+'Train/'+filename+'.npz', feats=feats, baf=baf, onset_times=onset_times)
+
+        for i, feats in enumerate(Feats):
+            if len(Feats) == 1: 
+                suffix='_'+dataset
+            else:
+                suffix='_'+dataset+'_ch_'+str(i)
+                # print(suffix)
+   
+            if jam_name.split('/')[-1] in TestSet:
+                print('test')
+                np.savez(path_to_store+'Test/'+filename+suffix+'.npz', feats=feats, baf=baf, onset_times=onset_times)
+            else:
+                np.savez(path_to_store+'Train/'+filename+suffix+'.npz', feats=feats, baf=baf, onset_times=onset_times)
 
         # npzfile = np.load(path_to_store+filename+'.npz')
 

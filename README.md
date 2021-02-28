@@ -10,7 +10,7 @@ Choose a workspace folder* ~/PathTo/MyWorkspace*. Create directories:
 - *~/PathTo/MyWorkspace/annos* ->extract annotations here 
 - *~/PathTo/MyWorkspace/mic* ->mic recordings 
 - *~/PathTo/MyWorkspace/hex_cln* -> 6 chanel-debleeded 
-- *~/PathTo/MyWorkspace/audio_mono_pickup* -> summed chanels 
+- *~/PathTo/MyWorkspace/audio_mono_pickup* -> summed chanels  # mix is a better name
 ++ models
 ++ results
 
@@ -48,4 +48,4 @@ Holds the genetic function that takes as input an estimated guitar tab, and uses
 
 run track_class.get_features_and_targets() to create npz files
 
-Onset Detection: python music_test.py --epochs 100 --modality Audio --train True --project_dir ~/fresh-guit-proc/ --feats melspec --ksize 5 --instr guitar --fs 44100 --hop 441 --w_size 1764 -rescaled
+Onset Detection: python music_test.py --epochs 100 --modality Audio -train --project_dir ~/fresh-guit-proc/ --feats melspec --ksize 5 --instr guitar --fs 44100 --hop 441 --w_size 1764 -rescaled
