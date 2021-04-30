@@ -25,7 +25,7 @@ import madmom
 from madmom.evaluation.onsets import onset_evaluation
 
 
-dataset = 'mic'
+dataset = 'mix'
 workspace = initialize_workspace(os.path.join('C:\\','Users','stefa','Documents','guit_workspace'))
 
 #coeff = read_correlate_matrix()

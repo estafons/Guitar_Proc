@@ -2,6 +2,7 @@ import os
 from initialize_workspace import *
 import pandas as pd
 import random
+from helper import determine_combinations
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -215,6 +216,8 @@ def get_weight_of_tab(tru_tab, estim_tab, mode = 'plain', probability_list = Non
 def determine_combinations(midi_f_cand): # returns all posible ways to play a candidate fundamental
     ret = []
     fret_range = [range(40,56),range(45,61),range(50,66),range(55,71),range(59,75),range(64,82)]
+    fret_range = [range(40,58),range(45,63),range(50,68),range(55,73),range(59,77),range(64,82)]
+    #fret_range = [range(40,53),range(45,58),range(50,63),range(55,68),range(59,72),range(64,77)]
     for string, x in enumerate(fret_range):
         if midi_f_cand in list(x):
             ret.append((midi_f_cand, string, compute_fret(string, midi_f_cand)))

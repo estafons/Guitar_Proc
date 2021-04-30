@@ -53,19 +53,28 @@ class my_signals: #implements methods that all need
 
 
 
-    def get_max_freqs(self,ff_t=None):
+    def get_max_freqs(self,ff_t=None, is_fundamental = False):
         if ff_t is None:
             ff_t = self.ff_t
         freqs = self.frequencies
         max_peak = 0
         peaks, _  =scipy.signal.find_peaks(np.abs(ff_t),distance=100000)
-    #    print(freqs[peaks], ff_t[peaks])
-        try:
-            temp = range(peaks[0]-1,peaks[0]+2)
-            max_peak = average_peak(([np.abs(x) for x in ff_t[temp]]),list(freqs[temp]))
-        except:
-            print('exception in helper-note-instance get max_freqs occured')
-     #   print(max_peak)
+        #print(peaks)
+        #print(freqs[peaks], ff_t[peaks])
+        if is_fundamental:
+            try:
+                
+                temp = range(peaks[0]-10,peaks[0]+10)
+                max_peak = average_peak(([np.abs(x) for x in ff_t[temp]]),list(freqs[temp]))
+            except:
+                print('exception in helper-note-instance get max_freqs occured')
+        else:
+            try:
+                
+                temp = range(peaks[0]-1,peaks[0]+2)
+                max_peak = average_peak(([np.abs(x) for x in ff_t[temp]]),list(freqs[temp]))
+            except:
+                print('exception in helper-note-instance get max_freqs occured')
         return max_peak
 
 class note_instance(my_signals):
@@ -104,7 +113,7 @@ class note_instance(my_signals):
         if None in (self.fundamental,self.midi_note):
             raise Exception('not proper fundamental, midi note')
             exit(1)
-        self.fundamental_measured = self.measure_fund()
+        self.fundamental_measured = self.measure_fund()# - 2.5
         self.differences = []
         self.beta_list = []
         self.candidates = []
@@ -112,7 +121,7 @@ class note_instance(my_signals):
 
     def measure_fund(self):
         zeroed = self.zero_out(self.fundamental,10)
-        return self.get_max_freqs(zeroed)
+        return self.get_max_freqs(zeroed , is_fundamental=True)#, is_fundamental=True
 
     def load_track(self):
         data, fs = librosa.load(self.name,self.sampling_rate)
@@ -275,6 +284,7 @@ def compute_beta(y=None,d=None,k=None,track=None,mode='flat'): #least squares
         return beta
 
 def average_peak(peak_weights, peak_freqs):
+    #print(peak_freqs)
     summ = 0
     for index, x in enumerate(peak_weights):
         summ +=peak_weights[index]*peak_freqs[index]
@@ -298,7 +308,7 @@ def determine_string(track):
 def determine_combinations(f_cand): # returns all posible ways to play a candidate fundamental
     ret = []
    # fret_range = [range(40,53),range(45,58),range(50,63),range(55,68),range(59,72),range(64,77)]
-    fret_range = [range(40,57),range(45,52),range(50,67),range(55,72),range(59,76),range(64,79)]
+    fret_range = [range(40,58),range(45,63),range(50,68),range(55,73),range(59,77),range(64,82)]
     midi_f_cand = round(12*math.log(f_cand/440,2)+69)
     for index, x in enumerate(fret_range):
         if midi_f_cand in list(x):
